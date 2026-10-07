@@ -183,7 +183,7 @@ body.testing .grid{display:flex;flex-wrap:wrap}
     <button data-tab="chart">Chart<small>Look things up</small></button>
     <button data-tab="mc">Multiple choice<small>Pick from 4</small></button>
     <button data-tab="recall">Recall<small>No timer, no options</small></button>
-    <button data-tab="timed">Timed drill<small>Speed and ao5</small></button>
+    <button data-tab="timed">Timed drill<small>Type it, beat the clock</small></button>
   </nav>
 
   <div class="main">
@@ -336,7 +336,7 @@ async function initDb(){
 }
 document.addEventListener('visibilitychange', () => {
   if (document.hidden) { clearTimeout(saveTimer); flush(); }
-  else if (S.tab==='timed' && !revealed) t0 = performance.now();
+  else if (S.tab==='timed' && !answered) t0 = performance.now();
 });
 
 // ============================ PICKING ============================
@@ -375,6 +375,7 @@ function buildOptions(k){
 }
 
 // ============================ GRADING ============================
+function mode(){ return S.tab==='timed' ? 'k2r' : S.mode; }
 function grade(ok, given){
   const c = card(cur), timed = S.tab==='timed';
   sess.n++;
@@ -393,14 +394,14 @@ function grade(ok, given){
   // feedback text for mc / typed recall
   const K = KANA[cur];
   let msg = ok ? 'Correct. ' : 'Not quite. ';
-  msg += S.mode==='k2r' ? '<span class="k">'+cur+'</span> is '+esc(K.r)+'.' : esc(K.r)+' is <span class="k">'+cur+'</span>.';
+  msg += mode()==='k2r' ? '<span class="k">'+cur+'</span> is '+esc(K.r)+'.' : esc(K.r)+' is <span class="k">'+cur+'</span>.';
   let tip = '';
   if (!ok){
     let mix = null;
-    if (S.mode==='r2k' && given && KANA[given]) mix = given;
-    if (S.mode==='k2r' && given) mix = ORDER.find(x => x!==cur && (KANA[x].r===given || alts(x).has(given))) || null;
+    if (mode()==='r2k' && given && KANA[given]) mix = given;
+    if (mode()==='k2r' && given) mix = ORDER.find(x => x!==cur && (KANA[x].r===given || alts(x).has(given))) || null;
     if (mix){
-      msg += S.mode==='k2r' ? ' You read it as <span class="k">'+mix+'</span>.' : ' You picked <span class="k">'+mix+'</span>, which is '+esc(KANA[mix].r)+'.';
+      msg += mode()==='k2r' ? ' You read it as <span class="k">'+mix+'</span>.' : ' You picked <span class="k">'+mix+'</span>, which is '+esc(KANA[mix].r)+'.';
       tip = tipFor(cur, mix);
     }
     if (!tip && !mix) tip = lookTips(cur)[0] || '';
@@ -430,12 +431,12 @@ function directionBar(){
 }
 function promptSquare(tap){
   const K = KANA[cur];
-  if (S.mode==='k2r') return '<div class="square'+(tap?' tap':'')+'" id="square"'+(tap?' role="button" tabindex="0" aria-label="Reveal answer"':'')+'><div class="prompt'+(cur.length>1?' wide':'')+'">'+cur+'</div></div>';
+  if (mode()==='k2r') return '<div class="square'+(tap?' tap':'')+'" id="square"'+(tap?' role="button" tabindex="0" aria-label="Reveal answer"':'')+'><div class="prompt'+(cur.length>1?' wide':'')+'">'+cur+'</div></div>';
   return '<div class="square'+(tap?' tap':'')+'" id="square"'+(tap?' role="button" tabindex="0" aria-label="Reveal answer"':'')+'><div class="prompt romaji">'+esc(K.r)+'</div><div class="prompt-note">'+esc(R2K_NOTE[cur]||'')+'</div></div>';
 }
 function answerBlock(){
   const K = KANA[cur];
-  let h = S.mode==='k2r' ? '<div class="ans-main">'+esc(K.r)+'</div>' : '<div class="ans-main"><span class="k">'+cur+'</span></div>';
+  let h = mode()==='k2r' ? '<div class="ans-main">'+esc(K.r)+'</div>' : '<div class="ans-main"><span class="k">'+cur+'</span></div>';
   if (K.w) h += '<div class="ans-ex"><b>'+K.w+'</b> · '+esc(K.wr)+' · '+esc(K.m)+'</div>';
   const tips = [NOTE[cur], ...lookTips(cur).map(t => t)].filter(Boolean);
   if (tips.length) h += '<div class="ans-tip">'+esc(tips.join(' '))+'</div>';
@@ -512,16 +513,23 @@ function checkTyped(){
   const v = inp.value.toLowerCase().replace(/[^a-z]/g,'');
   if (!v) return;
   lastTyped = inp.value; answered = true;
-  grade(alts(cur).has(v), v); renderRecall();
+  if (S.tab==='timed'){ cancelAnimationFrame(raf); revealMs = performance.now()-t0; }
+  grade(alts(cur).has(v), v); S.tab==='timed' ? renderTimed() : renderRecall();
 }
-function giveUp(){ if (answered) return; lastTyped = ''; answered = true; grade(false, null); renderRecall(); }
+function giveUp(){
+  if (answered) return; lastTyped = ''; answered = true;
+  if (S.tab==='timed'){ cancelAnimationFrame(raf); revealMs = performance.now()-t0; }
+  grade(false, null); S.tab==='timed' ? renderTimed() : renderRecall();
+}
 
 // ---- Timed drill
 function renderTimed(){
-  let h = directionBar() + promptSquare(true) + '<div class="timer" id="timer">0.00</div>';
-  h += '<div class="answer" id="answer"><p class="hint">Say it in your head, then tap the square or press Space.</p></div>';
-  h += '<div class="rate"><button class="b-miss" data-rate="0" disabled>Missed<kbd>1</kbd></button><button class="b-got" data-rate="1" disabled>Got it<kbd>2</kbd></button></div>';
-  h += '<div class="keys"><kbd>Space</kbd> reveal · <kbd>1</kbd>/<kbd>←</kbd> missed · <kbd>2</kbd>/<kbd>→</kbd> got it</div>';
+  let h = '<div class="trow"><span class="label">'+pool().length+' kana in test</span></div>' + promptSquare(false) + '<div class="timer'+(answered?' stopped':'')+'" id="timer">'+(answered?fmt(revealMs):'0.00')+'</div>';
+  h += '<div class="typed"><input id="ans" placeholder="Type the romaji, e.g. shi" autocapitalize="off" autocomplete="off" autocorrect="off" spellcheck="false"'+(answered?' readonly class="'+(fb&&fb.ok?'ok':'bad')+'"':'')+'>'
+    + '<button class="btn" data-check>'+(answered?'Next':'Check')+'</button></div>';
+  if (answered) h += feedbackBlock() + exampleLine();
+  else h += '<button class="btn quiet" data-giveup>I don’t know (DNF)</button>';
+  h += '<div class="keys"><kbd>Enter</kbd> to check, then <kbd>Enter</kbd> for the next one</div>';
   h += '<div class="stats">'
     + '<div class="stat"><span class="label">Cards</span><span class="v">'+sess.list.length+'</span></div>'
     + '<div class="stat"><span class="label">Accuracy</span><span class="v">'+(sess.list.length?Math.round(100*sess.list.filter(x=>x.ms!==Infinity).length/sess.list.length)+'%':'–')+'</span></div>'
@@ -531,6 +539,9 @@ function renderTimed(){
     + (sess.list.length ? sess.list.slice(-12).reverse().map(x => '<span class="chip'+(x.ms===Infinity?' dnf':'')+'"><span class="k">'+x.k+'</span>'+(x.ms===Infinity?'DNF':x.ms==null?'—':fmt(x.ms))+'</span>').join('') : '<span class="hint" style="font-size:.82rem">Your recall times appear here. Misses count as DNF.</span>')
     + '</div></div>';
   $('tool').innerHTML = h;
+  const inp = $('ans'); if (answered) inp.value = lastTyped;
+  inp.focus({preventScroll:true});
+  if (answered) return;
   t0 = performance.now();
   const tick = () => { const el = $('timer'); if (!el) return; el.textContent = ((performance.now()-t0)/1000).toFixed(2); raf = requestAnimationFrame(tick); };
   tick();
@@ -545,7 +556,7 @@ function aoN(n){
 }
 
 function reveal(){
-  if (!cur || revealed || !(S.tab==='timed' || (S.tab==='recall' && S.mode==='r2k'))) return;
+  if (!cur || revealed || !(S.tab==='recall' && S.mode==='r2k')) return;
   revealed = true;
   if (S.tab==='timed'){
     cancelAnimationFrame(raf); revealMs = performance.now()-t0;
@@ -679,7 +690,7 @@ document.addEventListener('keydown', e => {
     else if (answered && (k==='Enter'||k===' ')) { e.preventDefault(); next(); }
     return;
   }
-  if (S.tab==='recall' && S.mode==='k2r') return;
+  if (S.tab==='timed' || (S.tab==='recall' && S.mode==='k2r')) return;
   if (k===' '||k==='Enter'){ e.preventDefault(); reveal(); }
   else if (revealed && (k==='1'||k==='ArrowLeft')) { e.preventDefault(); rate(false); }
   else if (revealed && (k==='2'||k==='ArrowRight')) { e.preventDefault(); rate(true); }
