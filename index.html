@@ -161,6 +161,11 @@ kbd{font-family:var(--f-num);font-size:.72rem;border:1px solid currentColor;bord
 .cell.off{opacity:.45}
 .cell.now{box-shadow:0 0 0 2px var(--indigo)}
 .gap{visibility:hidden}
+/* While testing, the chart is hidden: only the row pickers remain. */
+body.testing .cell,body.testing .gap,body.testing .legend{display:none}
+body.testing .row,body.testing .row.y{display:inline-flex;margin:0 5px 5px 0}
+body.testing .rowbtn{min-width:3.4rem;min-height:2.2rem}
+body.testing .grid{display:flex;flex-wrap:wrap}
 .foot{display:flex;flex-wrap:wrap;justify-content:space-between;gap:10px;align-items:center;font-size:.8rem;color:var(--muted);border-top:1px solid var(--line);padding-top:12px}
 .reset{border:1px solid var(--line);background:transparent;border-radius:6px;padding:4px 10px;font-size:.8rem;color:var(--muted)}
 .reset.armed{border-color:var(--miss);color:var(--miss);background:var(--miss-soft)}
@@ -412,7 +417,8 @@ function setTab(t, keep){
   $('chartLabel').textContent = t==='chart' ? 'Hiragana chart' : 'Choose sections to test';
   $('footText').textContent = t==='chart'
     ? 'Tap a kana to look it up. Tap a row label to include that row in tests.'
-    : 'Tap a row label to add or remove it. Tap a kana to change its status.';
+    : 'Tap a row label to add or remove it. The chart is hidden while you are being tested.';
+  document.body.classList.toggle('testing', t!=='chart');
   cancelAnimationFrame(raf);
   if (t==='chart') renderRef(); else next();
 }
